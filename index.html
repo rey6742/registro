@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Gestión Financiera Educativa (SGF-Edu)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Librerías de PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    
+    <!-- Librería de QR Code -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <style>
+        /* URL del logo cargado por el usuario */
+        const BACKGROUND_IMAGE_URL = "";
+
+        body {
+            font-family: 'Inter', sans-serif;
+            /* Fondo con la imagen del usuario */
+            background-image: url(BACKGROUND_IMAGE_URL);
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px; 
+            overflow-y: auto;
+        }
+
+        #mainCard {
+            transition: all 0.3s ease-in-out;
+            /* Aplicar un fondo semi-transparente y desenfoque al contenedor de login */
+            background-color: rgba(245, 245, 245, 0.9);
+            backdrop-filter: blur(5px);
+        }
+        
+        /* Estilos para el modal de diálogo */
+        dialog {
+            border: none;
+            padding: 0;
+            border-radius: 0.75rem; /* rounded-xl */
+            box-shadow: 0 25px 50px -12px rgba(20, 4, 233, 0.25); /* shadow-2xl */
+            max-width: 90%;
+            width: 400px;
+        }
+        dialog::backdrop {
+            background-color: rgba(189, 27, 27, 0.5);
+            backdrop-filter: blur(3px);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Tarjeta Principal: Usada para Login y Menús -->
+    <div id="mainCard" class="p-8 rounded-lg shadow-2xl w-full max-w-sm">
+        <!-- Título simplificado para la vista de Login -->
+        <h1 id="mainTitle" class="text-3xl font-bold mb-6 text-gray-800 text-center">Gestion de Pagos y Mensualidades </h1>
+        
+        <!-- Vista 1: Formulario de Ingreso -->
+        <form id="loginForm">
+            <div class="mb-4">
+                <label for="username" class="block text-gray-700 text-sm font-semibold mb-2">Nombre de Usuario</label>
+                <!-- Usuario de prueba: garcon -->
+                <input type="text" id="username" class="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="garcon" required>
+            </div>
+            
+            <div class="mb-6">
+                <label for="password" class="block text-gray-700 text-sm font-semibold mb-2">Contraseña</label>
+                <!-- Contraseña de prueba: 12345678 -->
+                <input type="password" id="password" class="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="*******" required>
+            </div>
+            
+            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                Iniciar Sesión
+            </button>
+        </form>
+
+        <!-- Vista 2: Panel de Administración (Oculto por defecto) -->
+        <div id="adminDashboard" class="hidden flex flex-col items-center gap-4">
+            <p class="text-lg font-semibold text-gray-700 mb-2">Panel de Administración</p>
+            
+            <button id="btnMatricula" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-green-700 transition duration-300 shadow-md">
+                Matrícula y Mensualidades (Estudiantes)
+            </button>
+            
+            <button id="btnDocentes" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-indigo-700 transition duration-300 shadow-md">
+                Pagos de Docentes
+            </button>
+            
+            <button id="logoutBtn" class="w-full mt-6 bg-gray-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-600 transition duration-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2">
+                Cerrar Sesión
+            </button>
+        </div>
+
+        <div id="messageBox" class="mt-4 p-3 rounded-lg text-center hidden"></div>
+    </div>
+
+    <div id="matriculaDashboard" class="hidden absolute top-0 left-0 w-full min-h-screen pt-10 pb-10 flex justify-center items-start">
+    </div>
+    
+    <div id="docentesDashboard" class="hidden absolute top-0 left-0 w-full min-h-screen pt-10 pb-10 flex justify-center items-start">
+    </div>
+
+    <!-- Modal de Edición de Pago (Dialog) -->
+    <dialog id="editModal">
+        <div class="bg-white p-6 rounded-xl">
+            <h3 class="text-xl font-bold mb-4 text-gray-800">Editar Pago</h3>
+            <form id="editPaymentForm" class="space-y-3">
+                <input type="hidden" id="edit-id">
+                <input type="text" id="edit-matricula" placeholder="N° Matrícula" class="w-full px-3 py-2 border rounded-lg focus:ring-blue-500" required>
+                <input type="text" id="edit-estudiante" placeholder="Estudiante" class="w-full px-3 py-2 border rounded-lg focus:ring-blue-500" required>
+                <input type="text" id="edit-carrera" placeholder="Carrera" class="w-full px-3 py-2 border rounded-lg focus:ring-blue-500" required>
+                <input type="text" id="edit-concepto" placeholder="Concepto" class="w-full px-3 py-2 border rounded-lg focus:ring-blue-500" required>
+                <input type="number" id="edit-monto" placeholder="Monto (Bs.)" step="0.01" min="0" class="w-full px-3 py-2 border rounded-lg focus:ring-blue-500" required>
+                <input type="date" id="edit-fecha" class="w-full px-3 py-2 border rounded-lg focus:ring-blue-500" required>
+                
+                <div class="flex justify-end gap-2 pt-4">
+                    <button type="button" id="cancelEditBtn" class="bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-400 transition">Cancelar</button>
+                    <button type="submit" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </dialog>
+
+    <!-- Modal de Confirmación de Eliminación (Dialog) -->
+    <dialog id="deleteModal">
+        <div class="bg-white p-6 rounded-xl text-center">
+            <svg class="w-12 h-12 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.398 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            <h3 class="text-lg font-bold text-gray-800">Confirmar Eliminación</h3>
+            <p class="text-sm text-gray-600 mt-2">¿Estás seguro de que deseas eliminar este registro de pago? Esta acción es **irreversible**.</p>
+            <div class="flex justify-center gap-3 pt-6">
+                <button id="cancelDeleteBtn" class="bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg hover:bg-gray-400 transition">Cancelar</button>
+                <button id="confirmDeleteBtn" class="bg-red-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-700 transition">Eliminar</button>
+            </div>
+        </div>
+    </dialog>
+
+
+    <script>
+        // Definición de la URL del logo para la marca de agua y fondo
+        const LOGO_URL = "uploaded:FB_IMG_1757243137379.jpg-db84e9f9-5c79-46ec-9a97-abdeb0dca5b3";
+        let base64Image = null; // Variable para guardar el logo convertido a Base64
+
+        // --- Conversión de Imagen a Base64 (Necesario para jsPDF) ---
+        function getBase64Image(url, callback) {
+            const img = new Image();
+            img.crossOrigin = 'Anonymous'; 
+            img.onload = function () {
+                const canvas = document.createElement('canvas');
+                canvas.width = this.naturalWidth;
+                canvas.height = this.naturalHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(this, 0, this.naturalHeight, this.naturalWidth, -this.naturalHeight); // Voltear la imagen
+                base64Image = canvas.toDataURL('image/jpeg'); 
+                callback();
+            };
+            img.onerror = () => {
+                console.error("Error al cargar la imagen. El PDF no tendrá marca de agua.");
+                callback();
+            }
+            img.src = url;
+        }
+
+        getBase64Image(LOGO_URL, () => console.log("Logo precargado para PDF."));
+
+
+        // Obtener elementos del DOM
+        const form = document.getElementById('loginForm');
+        const mainCard = document.getElementById('mainCard');
+        const adminDashboard = document.getElementById('adminDashboard');
+        const matriculaDashboard = document.getElementById('matriculaDashboard');
+        const docentesDashboard = document.getElementById('docentesDashboard');
+        const messageBox = document.getElementById('messageBox');
+        const mainTitle = document.getElementById('mainTitle');
+        const btnMatricula = document.getElementById('btnMatricula');
+        const btnDocentes = document.getElementById('btnDocentes');
+        const logoutBtn = document.getElementById('logoutBtn');
+        
+        // Modales
+        const editModal = document.getElementById('editModal');
+        const deleteModal = document.getElementById('deleteModal');
+        const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+        const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
+        const cancelEditBtn = document.getElementById('cancelEditBtn');
+
+        // Credenciales de prueba
+        const USERNAME = 'garcon';
+        const PASSWORD = '12345678';
+        
+        // --- DATOS DE PRUEBA SIMULADOS ---
+        let historicalPayments = [
+            { id: 1, matricula: '2023001', estudiante: 'Ana López', carrera: 'Psicología', concepto: 'Matrícula Anual', monto: 8300.00, fechaCancelacion: '2023-01-15' },
+            { id: 2, matricula: '2023002', estudiante: 'Roberto Soto', carrera: 'Ing. Sistemas', concepto: 'Mensualidad Marzo', monto: 1750.00, fechaCancelacion: '2023-03-05' },
+            { id: 3, matricula: '2023001', estudiante: 'Ana López', carrera: 'Psicología', concepto: 'Mensualidad Febrero', monto: 1750.00, fechaCancelacion: '2023-02-01' },
+            { id: 4, matricula: '2023003', estudiante: 'Carlos Pérez', carrera: 'Derecho', concepto: 'Mensualidad Enero', monto: 2100.00, fechaCancelacion: '2023-01-02' },
+        ];
+
+
+        // --- Funciones de Utilidad y Lógica de Vistas ---
+
+        function hideAllViews() {
+            form.classList.add('hidden');
+            adminDashboard.classList.add('hidden');
+            matriculaDashboard.classList.add('hidden');
+            docentesDashboard.classList.add('hidden');
+            messageBox.classList.add('hidden');
+            mainCard.classList.remove('absolute', 'top-10', 'wide-card');
+            mainCard.classList.add('max-w-sm');
+        }
+
+        function showMessage(message, type) {
+            messageBox.textContent = message;
+            messageBox.classList.remove('hidden', 'bg-red-200', 'text-red-700', 'bg-green-200', 'text-green-700');
+            
+            if (type === 'success') {
+                messageBox.classList.add('bg-green-200', 'text-green-700');
+            } else if (type === 'error') {
+                messageBox.classList.add('bg-red-200', 'text-red-700');
+            }
+
+            messageBox.classList.remove('hidden');
+        }
+
+        function goBackToAdminPanel() {
+            hideAllViews();
+            mainCard.classList.remove('hidden');
+            adminDashboard.classList.remove('hidden');
+            mainTitle.textContent = 'Bienvenido, garcon';
+            matriculaDashboard.innerHTML = '';
+            docentesDashboard.innerHTML = '';
+        }
+
+       
+        const drawHeaderAndWatermark = (doc, mainTitle, subTitle) => {
+            const docWidth = doc.internal.pageSize.getWidth();
+            const docHeight = doc.internal.pageSize.getHeight();
+            const leftMargin = 14;
+
+            // 1. Marca de Agua (Watermark)
+            if (base64Image) {
+                const imgSize = docWidth * 0.7; 
+                const imgX = (docWidth - imgSize) / 2;
+                const imgY = (docHeight - imgSize) / 2;
+                
+                doc.setGState(new doc.GState({opacity: 0.1})); 
+                doc.addImage(base64Image, 'JPEG', imgX, imgY, imgSize, imgSize);
+                doc.setGState(new doc.GState({opacity: 1})); 
+            }
+
+            // 2. Encabezado
+            // Top Left: Institute Name (Abreviado)
+            doc.setFontSize(12);
+            doc.setFont(doc.getFont().fontName, 'bold');
+            doc.text("ITS GARCON", leftMargin, 15); 
+
+            // Center: Report Title ("DETALLES" or "COMPROBANTE")
+            doc.setFontSize(18);
+            doc.setFont(doc.getFont().fontName, 'bold');
+            const textWidth = doc.getStringUnitWidth(mainTitle) * doc.getFontSize() / doc.internal.scaleFactor;
+            const centerPos = (docWidth - textWidth) / 2;
+            doc.text(mainTitle, centerPos, 15);
+            
+            // Subtítulo/Fecha
+            doc.setFontSize(10);
+            doc.setFont(doc.getFont().fontName, 'normal');
+            doc.text(subTitle, leftMargin, 23);
+            
+            return 30;
+        };
+
+        // --- Generación de PDF: REPORTE GENERAL AGRUPADO ---
+
+        function generatePaymentsPDF() {
+            if (typeof window.jspdf === 'undefined' || typeof window.jspdf.jsPDF === 'undefined') {
+                showMessage('Error: jsPDF no cargó correctamente.', 'error');
+                return;
+            }
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const docWidth = doc.internal.pageSize.getWidth();
+            const docHeight = doc.internal.pageSize.getHeight();
+            const date = new Date().toLocaleDateString('es-ES');
+            
+            // Agrupar pagos por estudiante
+            const paymentsByStudent = historicalPayments.reduce((acc, payment) => {
+                const student = payment.estudiante;
+                if (!acc[student]) {
+                    acc[student] = [];
+                }
+                acc[student].push(payment);
+                return acc;
+            }, {});
+
+            let currentY = drawHeaderAndWatermark(doc, "DETALLES", `Reporte de Pagos Cancelados - Generado el ${date}`);
+            const leftMargin = 14;
+
+
+            // Iterar y Agregar Tablas por Estudiante
+            for (const student in paymentsByStudent) {
+                const payments = paymentsByStudent[student];
+
+                // Comprobar paginación
+                if (currentY + 15 > docHeight - 30) {
+                    doc.addPage();
+                    currentY = drawHeaderAndWatermark(doc, "DETALLES", `Reporte de Pagos Cancelados - Generado el ${date}`);
+                }
+
+                // Subtítulo del Estudiante
+                doc.setFontSize(11);
+                doc.setFont(doc.getFont().fontName, 'bold');
+                doc.setTextColor(0, 100, 0); 
+                doc.text(`Estudiante: ${student} (Matrícula: ${payments[0].matricula})`, leftMargin, currentY);
+                doc.setTextColor(0, 0, 0); 
+                currentY += 2; 
+
+                const head = [['Carrera', 'Concepto', 'Monto (Bs.)', 'Fecha de Cancelación', 'ID']];
+                const body = payments.map(p => [
+                    p.carrera,
+                    p.concepto,
+                    `Bs.${p.monto.toFixed(2)}`, 
+                    p.fechaCancelacion,
+                    p.id
+                ]);
+
+                doc.autoTable({
+                    startY: currentY + 3,
+                    head: head,
+                    body: body,
+                    styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+                    headStyles: { fillColor: [52, 152, 219], textColor: 255 },
+                    margin: { left: leftMargin, right: 14 }
+                });
+
+                currentY = doc.lastAutoTable.finalY + 10;
+            }
+
+            // Pie de página (Número de página y QR)
+            let finalY = doc.lastAutoTable.finalY || currentY; 
+            
+            // Re-renderizar pie de página con conteo final de páginas
+            for (let i = 1; i <= doc.internal.getNumberOfPages(); i++) {
+                doc.setPage(i);
+                doc.setFontSize(8);
+                doc.text(`Página ${i} de ${doc.internal.getNumberOfPages()}`, docWidth - 20, docHeight - 10, {align: 'right'});
+            }
+            doc.setPage(doc.internal.getNumberOfPages()); // Volver a la última página
+
+            // Agregar Código QR solo en la última página
+            if (finalY + 50 > docHeight - 30) {
+                doc.addPage();
+                finalY = drawHeaderAndWatermark(doc, "DETALLES", `Reporte de Pagos Cancelados - Generado el ${date}`);
+            }
+
+            const qrContent = `Reporte SGF-Edu, Fecha: ${date}, Total Estudiantes: ${Object.keys(paymentsByStudent).length}, Total Registros: ${historicalPayments.length}. Validado por ITS GARCON.`;
+            const qrCanvas = document.createElement('canvas');
+
+            new QRCode(qrCanvas, { text: qrContent, width: 100, height: 100, correctLevel : QRCode.CorrectLevel.H });
+            
+            setTimeout(() => {
+                const qrImage = qrCanvas.toDataURL("image/png");
+                const qrSize = 35; 
+                const qrX = (docWidth / 2) - (qrSize / 2);
+                const qrY = finalY + 15; 
+
+                doc.addImage(qrImage, 'PNG', qrX, qrY, qrSize, qrSize);
+                doc.setFontSize(8);
+                doc.setFont(doc.getFont().fontName, 'normal');
+                doc.text("Código QR de Validación Interna (ITS GARCON)", qrX + qrSize / 2, qrY + qrSize + 3, {align: 'center'});
+
+                doc.save(`Reporte_Pagos_Cancelados_${new Date().toISOString().slice(0, 10)}.pdf`);
+                
+            }, 100); 
+        }
+
+        // --- Generación de PDF: COMPROBANTE INDIVIDUAL ---
+        
+        function generateReceiptPDF(payment) {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const docWidth = doc.internal.pageSize.getWidth();
+            const docHeight = doc.internal.pageSize.getHeight();
+            const date = new Date().toLocaleDateString('es-ES');
+            const leftMargin = 14;
+
+            let currentY = drawHeaderAndWatermark(doc, "COMPROBANTE", `Pago N° ${payment.id} - Emitido el ${date}`);
+            
+            // 1. Datos del Estudiante (Tarjeta superior)
+            doc.setFontSize(11);
+            doc.setTextColor(0, 0, 0); 
+            doc.setFont(doc.getFont().fontName, 'bold');
+            doc.text("DATOS DEL ESTUDIANTE", leftMargin, currentY + 5);
+
+            doc.setFont(doc.getFont().fontName, 'normal');
+            doc.autoTable({
+                startY: currentY + 8,
+                body: [
+                    ['Estudiante:', payment.estudiante],
+                    ['N° Matrícula:', payment.matricula],
+                    ['Carrera:', payment.carrera]
+                ],
+                theme: 'plain',
+                styles: { fontSize: 10, cellPadding: 1 },
+                columnStyles: { 0: { fontStyle: 'bold', cellWidth: 35 } },
+                margin: { left: leftMargin, right: 14 }
+            });
+
+            currentY = doc.lastAutoTable.finalY + 8;
+            
+            // 2. Detalle del Pago (Tabla)
+            doc.setFontSize(11);
+            doc.setFont(doc.getFont().fontName, 'bold');
+            doc.text("DETALLE DEL PAGO CANCELADO", leftMargin, currentY);
+            currentY += 2;
+
+            const head = [['Concepto de Pago', 'Fecha de Cancelación', 'Monto Cancelado']];
+            const body = [
+                [
+                    payment.concepto,
+                    payment.fechaCancelacion,
+                    `Bs.${payment.monto.toFixed(2)}`
+                ]
+            ];
+
+            doc.autoTable({
+                startY: currentY + 3,
+                head: head,
+                body: body,
+                styles: { fontSize: 10, cellPadding: 3, overflow: 'linebreak' },
+                headStyles: { fillColor: [52, 152, 219], textColor: 255 },
+                columnStyles: { 2: { fontStyle: 'bold', fillColor: [200, 230, 200] } },
+                margin: { left: leftMargin, right: 14 }
+            });
+
+            currentY = doc.lastAutoTable.finalY + 15;
+
+            // 3. Código QR de Validación
+            const qrContent = `COMPROBANTE ITS GARCON - Pago ID: ${payment.id}, Estudiante: ${payment.estudiante}, Monto: Bs.${payment.monto.toFixed(2)}, Concepto: ${payment.concepto}.`;
+            const qrCanvas = document.createElement('canvas');
+
+            new QRCode(qrCanvas, { text: qrContent, width: 100, height: 100, correctLevel : QRCode.CorrectLevel.H });
+            
+            setTimeout(() => {
+                const qrImage = qrCanvas.toDataURL("image/png");
+                const qrSize = 35; 
+                const qrX = (docWidth / 2) - (qrSize / 2);
+                const qrY = currentY + 15; 
+
+                doc.addImage(qrImage, 'PNG', qrX, qrY, qrSize, qrSize);
+                doc.setFontSize(8);
+                doc.setFont(doc.getFont().fontName, 'normal');
+                doc.text("Código QR de Validación (ITS GARCON)", qrX + qrSize / 2, qrY + qrSize + 3, {align: 'center'});
+
+                doc.save(`Comprobante_Pago_${payment.id}_${payment.estudiante.replace(/\s/g, '_')}.pdf`);
+            }, 100); 
+        }
+
+        // --- Lógica de CRUD (Simulada) ---
+
+        let paymentToDeleteId = null; 
+
+        function openEditModal(index) {
+            const payment = historicalPayments[index];
+            if (!payment) return;
+
+            // Llenar el formulario del modal
+            document.getElementById('edit-id').value = payment.id;
+            document.getElementById('edit-matricula').value = payment.matricula;
+            document.getElementById('edit-estudiante').value = payment.estudiante;
+            document.getElementById('edit-carrera').value = payment.carrera;
+            document.getElementById('edit-concepto').value = payment.concepto;
+            document.getElementById('edit-monto').value = payment.monto.toFixed(2);
+            document.getElementById('edit-fecha').value = payment.fechaCancelacion;
+            
+            editModal.showModal();
+        }
+
+        function handleEditSubmit(e) {
+            e.preventDefault();
+            const idToUpdate = parseInt(document.getElementById('edit-id').value);
+            const index = historicalPayments.findIndex(p => p.id === idToUpdate);
+
+            if (index !== -1) {
+                historicalPayments[index] = {
+                    id: idToUpdate,
+                    matricula: document.getElementById('edit-matricula').value,
+                    estudiante: document.getElementById('edit-estudiante').value,
+                    carrera: document.getElementById('edit-carrera').value,
+                    concepto: document.getElementById('edit-concepto').value,
+                    monto: parseFloat(document.getElementById('edit-monto').value),
+                    fechaCancelacion: document.getElementById('edit-fecha').value
+                };
+
+                editModal.close();
+                showMessage(`Pago N° ${idToUpdate} actualizado correctamente.`, 'success');
+                renderMatriculaContent('historialPagos'); // Recargar la tabla
+            } else {
+                showMessage('Error: Pago no encontrado.', 'error');
+            }
+        }
+        
+        function openDeleteModal(id) {
+            paymentToDeleteId = id;
+            deleteModal.showModal();
+        }
+
+        function handleDeleteConfirm() {
+            if (paymentToDeleteId !== null) {
+                const initialLength = historicalPayments.length;
+                historicalPayments = historicalPayments.filter(p => p.id !== paymentToDeleteId);
+                
+                if (historicalPayments.length < initialLength) {
+                    showMessage(`Pago N° ${paymentToDeleteId} eliminado correctamente.`, 'success');
+                    renderMatriculaContent('historialPagos'); // Recargar la tabla
+                } else {
+                    showMessage('Error: No se pudo encontrar el pago para eliminar.', 'error');
+                }
+            }
+            deleteModal.close();
+            paymentToDeleteId = null;
+        }
+
+        // --- Event Listeners para Modales ---
+        cancelEditBtn.addEventListener('click', () => editModal.close());
+        document.getElementById('editPaymentForm').addEventListener('submit', handleEditSubmit);
+
+        cancelDeleteBtn.addEventListener('click', () => deleteModal.close());
+        confirmDeleteBtn.addEventListener('click', handleDeleteConfirm);
+
+
+        // --- Lógica de Ingreso y Navegación Principal ---
+
+        form.addEventListener('submit', function(event) {
+            event.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            if (username === USERNAME && password === PASSWORD) {
+                showMessage('¡Ingreso exitoso!', 'success');
+                hideAllViews();
+                adminDashboard.classList.remove('hidden');
+                mainTitle.textContent = 'Bienvenido, garcon';
+                form.classList.add('hidden');
+                mainCard.classList.remove('max-w-sm');
+                mainCard.classList.add('max-w-md');
+                
+                // Quitar el desenfoque y el fondo semi-transparente del dashboard
+                mainCard.classList.remove('bg-white', 'backdrop-blur-sm');
+                mainCard.style.backgroundColor = 'white'; 
+            } else {
+                showMessage('Nombre de usuario o contraseña incorrectos.', 'error');
+            }
+        });
+
+        logoutBtn.addEventListener('click', () => {
+            hideAllViews();
+            form.classList.remove('hidden');
+            mainTitle.textContent = 'Ingreso al Sistema';
+            document.getElementById('password').value = '';
+            mainCard.classList.remove('max-w-md');
+            mainCard.classList.add('max-w-sm');
+
+            // Devolver el fondo al estado de login
+            mainCard.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+            mainCard.classList.add('backdrop-blur-sm'); 
+        });
+
+        btnMatricula.addEventListener('click', () => {
+            hideAllViews();
+            mainCard.classList.add('hidden');
+            matriculaDashboard.classList.remove('hidden');
+            renderMatriculaDashboard();
+        });
+
+        btnDocentes.addEventListener('click', () => {
+            hideAllViews();
+            mainCard.classList.add('hidden');
+            docentesDashboard.classList.remove('hidden');
+            renderDocentesDashboard();
+        });
+        
+        
+        // --- Renderizado de Vistas Grandes (Matrícula y Docentes) ---
+
+        function renderMatriculaDashboard() {
+            matriculaDashboard.innerHTML = `
+                <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl w-full max-w-5xl wide-card">
+                    <h2 class="text-3xl font-extrabold text-green-700 mb-6 text-center">Gestión de Matrícula y Mensualidades</h2>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <button class="menu-btn bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg shadow-md transition duration-200" data-view="registroPago">
+                            <span class="text-xl">💰</span> Registrar Nuevo Pago
+                        </button>
+                        <button class="menu-btn bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg shadow-md transition duration-200" data-view="historialPagos">
+                            <span class="text-xl">📋</span> Historial de Pagos
+                        </button>
+                        <button class="menu-btn bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded-lg shadow-md transition duration-200" data-view="pagosPendientes">
+                            <span class="text-xl">🚨</span> Pagos Pendientes
+                        </button>
+                    </div>
+
+                    <div id="matriculaContent" class="mt-8 border-t pt-6">
+                        <p class="text-gray-500 text-center">Selecciona una opción para comenzar la gestión de estudiantes.</p>
+                    </div>
+
+                    <button id="backFromMatricula" class="w-full mt-8 bg-gray-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-600 transition duration-300">
+                        Volver al Panel Principal
+                    </button>
+                </div>
+            `;
+            
+            document.getElementById('backFromMatricula').addEventListener('click', goBackToAdminPanel);
+            
+            document.querySelectorAll('.menu-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const view = e.currentTarget.getAttribute('data-view');
+                    renderMatriculaContent(view);
+                });
+            });
+        }
+        
+        function renderMatriculaContent(view) {
+            const contentDiv = document.getElementById('matriculaContent');
+            contentDiv.innerHTML = '';
+            
+            switch(view) {
+                case 'registroPago':
+                    contentDiv.innerHTML = `
+                        <h3 class="text-2xl font-semibold text-blue-700 mb-4 text-center">Registrar Nuevo Pago de Estudiante</h3>
+                        <form id="registroPagoForm" class="space-y-4 max-w-md mx-auto">
+                            <input type="text" placeholder="N° Matrícula" class="w-full px-4 py-2 border rounded-lg focus:ring-blue-500" required>
+                            <input type="text" placeholder="Nombre del estudiante" class="w-full px-4 py-2 border rounded-lg focus:ring-blue-500" required>
+                            <input type="text" placeholder="Carrera (Ej: Ingeniería de Sistemas)" class="w-full px-4 py-2 border rounded-lg focus:ring-blue-500" required>
+                            <input type="text" placeholder="Concepto (Ej: Matrícula, Mensualidad Marzo)" class="w-full px-4 py-2 border rounded-lg focus:ring-blue-500" required>
+                            <input type="number" placeholder="Monto (Bs.)" step="0.01" min="0" class="w-full px-4 py-2 border rounded-lg focus:ring-blue-500" required>
+                            <input type="date" id="fechaCancelacion" class="w-full px-4 py-2 border rounded-lg focus:ring-blue-500" required>
+                            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700">Guardar Pago</button>
+                        </form>
+                    `;
+                    
+                    document.getElementById('registroPagoForm').addEventListener('submit', (e) => {
+                        e.preventDefault();
+                        
+                        // Generar ID simple para el ejemplo
+                        const newId = historicalPayments.length > 0 ? Math.max(...historicalPayments.map(p => p.id)) + 1 : 1;
+
+                        const data = {
+                            id: newId,
+                            matricula: e.target[0].value,
+                            estudiante: e.target[1].value,
+                            carrera: e.target[2].value,
+                            concepto: e.target[3].value,
+                            monto: parseFloat(e.target[4].value),
+                            fechaCancelacion: e.target[5].value
+                        };
+                        
+                        historicalPayments.push(data);
+
+                        showMessage('Pago registrado exitosamente (simulación).', 'success');
+                        e.target.reset();
+                        // Actualizar la vista del historial de pagos
+                        renderMatriculaContent('historialPagos');
+                    });
+                    break;
+
+                case 'historialPagos':
+                    
+                    const tableRows = historicalPayments.map((p, index) => `
+                        <tr class="hover:bg-green-50">
+                            <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-900">${p.matricula}</td>
+                            <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-900">${p.estudiante}</td>
+                            <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-900">${p.carrera}</td>
+                            <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-900">${p.concepto}</td>
+                            <td class="px-3 py-3 whitespace-nowrap text-sm font-semibold text-green-600">Bs.${p.monto.toFixed(2)}</td>
+                            <td class="px-3 py-3 whitespace-nowrap text-sm text-gray-500">${p.fechaCancelacion}</td>
+                            <td class="px-3 py-3 whitespace-nowrap text-sm text-right flex space-x-2 justify-center">
+                                <button class="generate-receipt-btn text-blue-600 hover:text-blue-800 font-medium p-1 rounded-full hover:bg-blue-100" title="Generar Comprobante PDF" data-index="${index}">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                </button>
+                                <button class="edit-payment-btn text-yellow-600 hover:text-yellow-800 font-medium p-1 rounded-full hover:bg-yellow-100" title="Editar Pago" data-index="${index}">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.879a2 2 0 012.828 0l1.414 1.414a2 2 0 010 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                                </button>
+                                <button class="delete-payment-btn text-red-600 hover:text-red-800 font-medium p-1 rounded-full hover:bg-red-100" title="Eliminar Pago" data-id="${p.id}">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('');
+
+                    contentDiv.innerHTML = `
+                        <h3 class="text-2xl font-semibold text-green-700 mb-4 text-center">Historial de Pagos Realizados</h3>
+                        
+                        <div class="flex justify-end mb-4 gap-3">
+                            <button id="exportPdfBtn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200 flex items-center">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m4 0v3m0 0h2m-2 0h-2M15 11l-3-3-3 3"></path></svg>
+                                Reporte General PDF
+                            </button>
+                        </div>
+                        
+                        <div class="overflow-x-auto border rounded-lg shadow-inner">
+                            <table id="paymentsTable" class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-green-50">
+                                    <tr>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">N° Matrícula</th>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Estudiante</th>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Carrera</th>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Concepto</th>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Monto (Bs.)</th>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Fecha de Cancelación</th>
+                                        <th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-100">
+                                    ${tableRows.length > 0 ? tableRows : '<tr><td colspan="7" class="px-3 py-3 text-center text-gray-500">No hay datos de historial.</td></tr>'}
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                    document.getElementById('exportPdfBtn').addEventListener('click', generatePaymentsPDF);
+                    
+                    document.querySelectorAll('.generate-receipt-btn').forEach(button => {
+                        button.addEventListener('click', (e) => {
+                            const index = parseInt(e.currentTarget.getAttribute('data-index'));
+                            generateReceiptPDF(historicalPayments[index]);
+                        });
+                    });
+                    
+                    document.querySelectorAll('.edit-payment-btn').forEach(button => {
+                        button.addEventListener('click', (e) => {
+                            const index = parseInt(e.currentTarget.getAttribute('data-index'));
+                            openEditModal(index);
+                        });
+                    });
+
+                    document.querySelectorAll('.delete-payment-btn').forEach(button => {
+                        button.addEventListener('click', (e) => {
+                            const id = parseInt(e.currentTarget.getAttribute('data-id'));
+                            openDeleteModal(id);
+                        });
+                    });
+
+
+                    break;
+
+                case 'pagosPendientes':
+                    contentDiv.innerHTML = `
+                        <h3 class="text-2xl font-semibold text-red-700 mb-4 text-center">Pagos Pendientes de Estudiantes</h3>
+                        <div class="overflow-x-auto border rounded-lg shadow-inner">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-red-50">
+                                    <tr>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">N° Matrícula</th>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Estudiante</th>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Carrera</th>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Concepto</th>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Monto (Bs.)</th>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Vencimiento</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-100">
+                                    <tr><td colspan="6" class="px-3 py-3 text-center text-gray-500">No hay deudas registradas.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                    break;
+            }
+        }
+
+        function renderDocentesDashboard() {
+            docentesDashboard.innerHTML = `
+                <div class="bg-white p-6 md:p-8 rounded-xl shadow-2xl w-full max-w-4xl wide-card">
+                    <h2 class="text-3xl font-extrabold text-indigo-700 mb-6 text-center">Gestión de Pagos a Docentes</h2>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                        <button class="docentes-menu-btn bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg shadow-md transition duration-200" data-view="registroPagoDocente">
+                            <span class="text-xl">💵</span> Registrar Pago Mensual
+                        </button>
+                        <button class="docentes-menu-btn bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg shadow-md transition duration-200" data-view="historialPagosDocente">
+                            <span class="text-xl">📚</span> Historial de Pagos
+                        </button>
+                        <button class="docentes-menu-btn bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-4 rounded-lg shadow-md transition duration-200" data-view="registroGeneralDocente">
+                            <span class="text-xl">🧑‍🏫</span> Registro General (Personal)
+                        </button>
+                    </div>
+
+                    <div id="docentesContent" class="mt-8 border-t pt-6">
+                        <p class="text-gray-500 text-center">Selecciona una opción para gestionar los pagos o el registro de personal docente.</p>
+                    </div>
+
+                    <button id="backFromDocentes" class="w-full mt-8 bg-gray-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-600 transition duration-300">
+                        Volver al Panel Principal
+                    </button>
+                </div>
+            `;
+            
+            document.getElementById('backFromDocentes').addEventListener('click', goBackToAdminPanel);
+            
+            document.querySelectorAll('.docentes-menu-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const view = e.currentTarget.getAttribute('data-view');
+                    renderDocentesContent(view);
+                });
+            });
+        }
+
+        function renderDocentesContent(view) {
+            const contentDiv = document.getElementById('docentesContent');
+            contentDiv.innerHTML = '';
+            
+            switch(view) {
+                case 'registroPagoDocente':
+                    contentDiv.innerHTML = `
+                        <h3 class="text-2xl font-semibold text-blue-700 mb-4 text-center">Registrar Pago Mensual a Docente</h3>
+                        <form id="registroPagoDocenteForm" class="space-y-4 max-w-md mx-auto">
+                            <input type="text" placeholder="Nombre del Docente" class="w-full px-4 py-2 border rounded-lg focus:ring-blue-500" required>
+                            <input type="text" placeholder="Mes Pagado (Ej: Mayo)" class="w-full px-4 py-2 border rounded-lg focus:ring-blue-500" required>
+                            <input type="number" placeholder="Monto (Bs.)" step="0.01" min="0" class="w-full px-4 py-2 border rounded-lg focus:ring-blue-500" required>
+                            <input type="date" class="w-full px-4 py-2 border rounded-lg focus:ring-blue-500" required>
+                            <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700">Guardar Pago Docente</button>
+                        </form>
+                    `;
+                    document.getElementById('registroPagoDocenteForm').addEventListener('submit', (e) => {
+                        e.preventDefault();
+                        showMessage('Pago a docente registrado exitosamente (simulación).', 'success');
+                        e.target.reset();
+                    });
+                    break;
+                case 'historialPagosDocente':
+                    contentDiv.innerHTML = `
+                        <h3 class="text-2xl font-semibold text-indigo-700 mb-4 text-center">Historial de Pagos a Docentes</h3>
+                        <div class="overflow-x-auto border rounded-lg shadow-inner">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-indigo-50">
+                                    <tr>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Docente</th>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Mes Pagado</th>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Monto (Bs.)</th>
+                                        <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Fecha</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-100">
+                                    <tr><td colspan="4" class="px-3 py-3 text-center text-gray-500">No hay datos de historial.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    `;
+                    break;
+                case 'registroGeneralDocente':
+                    contentDiv.innerHTML = `
+                        <h3 class="text-2xl font-semibold text-purple-700 mb-4 text-center">Registro General de Personal Docente</h3>
+                        <p class="text-center text-gray-600">Este módulo se usará para registrar la información de contacto y especialidad de cada docente.</p>
+                        <form id="registroGeneralDocenteForm" class="space-y-4 max-w-md mx-auto mt-6">
+                            <input type="text" placeholder="Nombre completo" class="w-full px-4 py-2 border rounded-lg focus:ring-purple-500" required>
+                            <input type="text" placeholder="Especialidad (Ej: Física, Programación)" class="w-full px-4 py-2 border rounded-lg focus:ring-purple-500" required>
+                            <input type="text" placeholder="Teléfono/Contacto" class="w-full px-4 py-2 border rounded-lg focus:ring-purple-500">
+                            <button type="submit" class="w-full bg-purple-600 text-white font-bold py-2 rounded-lg hover:bg-purple-700">Registrar Docente</button>
+                        </form>
+                    `;
+                    document.getElementById('registroGeneralDocenteForm').addEventListener('submit', (e) => {
+                        e.preventDefault();
+                        showMessage('Docente registrado en el sistema general (simulación).', 'success');
+                        e.target.reset();
+                    });
+                    break;
+            }
+        }
+
+    </script>
+
+</body>
+</html>
